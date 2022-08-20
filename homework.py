@@ -89,7 +89,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Витаскиваем из запроса имя и статус работы. 
+    """Витаскиваем из запроса имя и статус работы.
     И возвращаем сообщение информирующее нас о изменении статуса.
     """
     homework_name = homework['homework_name']
