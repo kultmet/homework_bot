@@ -33,9 +33,8 @@ HOMEWORK_STATUSES = {
 }
 
 logging.basicConfig(
-     level=logging.INFO,
-     filename='program.log',
-     
+    level=logging.INFO,
+    filename='program.log',
 )
 logger = logging.getLogger(__name__)
 handler = RotatingFileHandler(
@@ -54,6 +53,7 @@ logger.setLevel(logging.INFO)
 
 
 def send_message(bot, message):
+    """Посылаем сообщение в Телеграм."""
     bot.send_message(
         chat_id=TELEGRAM_CHAT_ID,
         text=f'{message}'
@@ -66,10 +66,10 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     response = requests.get(
-                    url=ENDPOINT,
-                    headers=HEADERS,
-                    params=params
-                )
+        url=ENDPOINT,
+        headers=HEADERS,
+        params=params
+    )
     if response.status_code != 200:
         logging.error('Сервер не отвечает.')
         raise Exception
@@ -82,17 +82,15 @@ def check_response(response):
     if isinstance(response['homeworks'], list):
         return response['homeworks']
     elif len(response['homeworks']) < 1:
-        logging.error(f'Список пуст')
+        logging.error('Список пуст')
         raise EmptyList
     else:
         Exception
 
 
 def parse_status(homework):
-    """
-    Витаскиваем из запроса имя и статус работы. И возвращаем сообщение
-    информирующее нас о изменении статуса.
-    """
+    """Витаскиваем из запроса имя и статус работы. И возвращаем сообщение
+    информирующее нас о изменении статуса."""
     homework_name = homework['homework_name']
     homework_status = homework['status']
     try:
@@ -102,7 +100,7 @@ def parse_status(homework):
         mess = f'Ошибка {error} в получении информации, Список работ пуст'
         logging.error(mess)
         return mess
-    except IndexError as error:
+    except IndexError:
         pass
 
 
@@ -115,7 +113,7 @@ def check_tokens():
     if TELEGRAM_CHAT_ID:
         return True
     else:
-        mess = f'Ошибка токена. Проверте перепенные окружания'
+        mess = 'Ошибка токена. Проверте перепенные окружания'
         logging.critical(mess)
         return False
 
@@ -127,7 +125,7 @@ def main():
     current_timestamp = int(time.time())
     statuses = []
     while True:
-        if check_tokens() == True:
+        if check_tokens() is True:
             try:
                 response = get_api_answer(current_timestamp=current_timestamp)
                 homework = check_response(response)
