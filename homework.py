@@ -1,5 +1,8 @@
 
+import json
 import os
+import sys
+from http import HTTPStatus
 import time
 import logging
 from logging.handlers import RotatingFileHandler
@@ -8,7 +11,7 @@ import requests
 from dotenv import load_dotenv
 import telegram
 
-from exceptions import EmptyList
+from exceptions import EmptyList, NotTwoHundred
 
 load_dotenv()
 
@@ -16,13 +19,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-variables = {
-    'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
-    'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
-    'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
-}
-
-RETRY_TIME = 600
+RETRY_TIME = 5
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -32,125 +29,108 @@ HOMEWORK_STATUSES = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.INFO,
-    filename='program.log',
-)
-logger = logging.getLogger(__name__)
-handler = RotatingFileHandler(
-    filename='program.log',
-    mode='w',
-    maxBytes=50000000,
-    backupCount=5,
-    encoding='UTF-8'
-)
-formatter = logging.Formatter(
-    '%(asctime)s, %(levelname)s, %(message)s',
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
 
 def send_message(bot, message):
     """Посылаем сообщение в Телеграм."""
-    bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=f'{message}'
-    )
-    logging.info('Сообщение об изменению статуса отправлено в Телеграм.')
+    try:
+        bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=f'{message}'
+        )
+    except telegram.error.TelegramError:
+        raise telegram.error.TelegramError('Телеграм не отвечает')
 
 
 def get_api_answer(current_timestamp):
     """Обращаямся к API Практикума. Возвращаем отклик в формате json."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(
-        url=ENDPOINT,
-        headers=HEADERS,
-        params=params
-    )
-    if response.status_code != 200:
-        logging.error('Сервер не отвечает.')
-        raise Exception
+    try:
+        response = requests.get(
+            url=ENDPOINT,
+            headers=HEADERS,
+            params=params
+        )
+    except requests.exceptions.RequestException:
+        raise requests.exceptions.RequestException('Запрос отклонен.')
+    if response.status_code != HTTPStatus.OK:
+        raise NotTwoHundred
     else:
-        return response.json()
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            raise json.JSONDecodeError('Ошибка json.')
 
 
 def check_response(response):
     """Проверяем, что приходит список работ и возвращаем его."""
     if isinstance(response['homeworks'], list):
-        return response['homeworks']
+        try:
+            return response['homeworks']
+        except KeyError:
+            raise KeyError('Ошибка ключа')
     elif len(response['homeworks']) < 1:
-        logging.error('Список пуст')
-        raise EmptyList
-    else:
-        Exception
+        raise EmptyList('Список пуст')
 
 
 def parse_status(homework):
     """Витаскиваем из запроса имя и статус работы.
     И возвращаем сообщение информирующее нас о изменении статуса.
     """
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
     try:
+        homework_name = homework['homework_name']
+        homework_status = homework['status']
         verdict = HOMEWORK_STATUSES[homework_status]
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    except TypeError as error:
-        mess = f'Ошибка {error} в получении информации, Список работ пуст'
-        logging.error(mess)
-        return mess
-    except IndexError:
-        pass
+    except KeyError:
+        raise KeyError('Ошибка ключа')
 
 
 def check_tokens():
     """Проверяем, что все переменные окружения есть."""
-    if TELEGRAM_TOKEN:
-        return True
-    if PRACTICUM_TOKEN:
-        return True
-    if TELEGRAM_CHAT_ID:
-        return True
-    else:
-        mess = 'Ошибка токена. Проверте перепенные окружания'
-        logging.critical(mess)
-        return False
+    iterable = (TELEGRAM_TOKEN, PRACTICUM_TOKEN, TELEGRAM_CHAT_ID,)
+    return all(iterable)
 
 
 def main():
     """Основная логика работы бота."""
-    check_tokens()
+    if check_tokens() is False:
+        sys.exit()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    statuses = []
+    last_status = ''
     while True:
-        if check_tokens() is True:
-            try:
-                response = get_api_answer(current_timestamp=current_timestamp)
-                homework = check_response(response)
-                status = homework[0]['status']
-                statuses.append(status)
-                if len(statuses) > 2:
-                    del statuses[0]
-                if statuses[0] != statuses[-1]:
-                    message = parse_status(homework[0])
-                    send_message(bot, message)
-                else:
-                    logging.debug('Статус не обновился')
-                time.sleep(RETRY_TIME)
-            except Exception as error:
-                statuses.append(error)
-                if len(statuses) > 2:
-                    del statuses[0]
-                logging.error(error)
-                time.sleep(RETRY_TIME)
+        try:
+            response = get_api_answer(current_timestamp=current_timestamp)
+            homework = check_response(response)
+            status = homework[0]['status']
+            if status != last_status:
+                last_status = f'{status}'
+                message = parse_status(homework[0])
+                send_message(bot, message)
             else:
-                pass
-        else:
-            break
+                logging.debug('Статус не обновился.')
+        except Exception as error:
+            logging.error(error)
+            
+        finally:
+            time.sleep(RETRY_TIME)
+
 
 
 if __name__ == '__main__':
+    handler = RotatingFileHandler(
+        filename='program.log',
+        mode='w',
+        maxBytes=50000000,
+        backupCount=5,
+        encoding='UTF-8'
+    )
+    handlers = (handler,)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        handlers=handlers,
+        format='%(asctime)s, %(levelname)s, %(message)s'
+    )
+    logger = logging.getLogger(__name__)
     main()

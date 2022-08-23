@@ -1,14 +1,3 @@
-import os
-from dotenv import load_dotenv, dotenv_values
-
-load_dotenv()
-class ExistsVariableException(Exception):
-    pass
-
-def exists_in_env(*args):
-    if args in dotenv_values:
-        raise ExistsVariableException('переменные отсутсятвуют в окружении.')
-
 class NotTwoHundred(Exception):
     pass
 
