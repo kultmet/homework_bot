@@ -112,10 +112,8 @@ def main():
                 logging.debug('Статус не обновился.')
         except Exception as error:
             logging.error(error)
-            
         finally:
             time.sleep(RETRY_TIME)
-
 
 
 if __name__ == '__main__':
