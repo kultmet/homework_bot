@@ -28,6 +28,7 @@ HOMEWORK_STATUSES = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
+logger = logging.getLogger(__name__)
 
 
 def send_message(bot, message):
@@ -54,23 +55,23 @@ def get_api_answer(current_timestamp):
     except requests.exceptions.RequestException:
         raise requests.exceptions.RequestException('Запрос отклонен.')
     if response.status_code != HTTPStatus.OK:
-        raise NotTwoHundred
-    else:
-        try:
-            return response.json()
-        except json.JSONDecodeError:
-            raise json.JSONDecodeError('Ошибка json.')
+        raise NotTwoHundred('Ошибка сервера.')
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        raise json.JSONDecodeError('Ошибка json.')
 
 
 def check_response(response):
     """Проверяем, что приходит список работ и возвращаем его."""
-    if isinstance(response['homeworks'], list):
-        try:
-            return response['homeworks']
-        except KeyError:
-            raise KeyError('Ошибка ключа')
-    elif len(response['homeworks']) < 1:
+    if not isinstance(response, dict):
+        raise TypeError
+    if not isinstance(response['homeworks'], list):
+        raise KeyError
+    if not len(response['homeworks']):
         raise EmptyList('Список пуст')
+    else:
+        return response['homeworks']
 
 
 def parse_status(homework):
@@ -88,8 +89,8 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяем, что все переменные окружения есть."""
-    iterable = (TELEGRAM_TOKEN, PRACTICUM_TOKEN, TELEGRAM_CHAT_ID,)
-    return all(iterable)
+    tokens = (TELEGRAM_TOKEN, PRACTICUM_TOKEN, TELEGRAM_CHAT_ID,)
+    return all(tokens)
 
 
 def main():
@@ -112,6 +113,7 @@ def main():
                 logging.debug('Статус не обновился.')
         except Exception as error:
             logging.error(error)
+            send_message(error)
         finally:
             time.sleep(RETRY_TIME)
 
@@ -130,5 +132,4 @@ if __name__ == '__main__':
         handlers=handlers,
         format='%(asctime)s, %(levelname)s, %(message)s'
     )
-    logger = logging.getLogger(__name__)
     main()
