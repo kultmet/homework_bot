@@ -66,12 +66,11 @@ def check_response(response):
     """Проверяем, что приходит список работ и возвращаем его."""
     if not isinstance(response, dict):
         raise TypeError
-    if not isinstance(response['homeworks'], list):
+    if 'homeworks' not in response:
         raise KeyError
-    if not len(response['homeworks']):
-        raise EmptyList('Список пуст')
-    else:
-        return response['homeworks']
+    if not isinstance(response['homeworks'], list):
+        raise TypeError
+    return response['homeworks']
 
 
 def parse_status(homework):
