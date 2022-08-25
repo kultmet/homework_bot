@@ -11,7 +11,7 @@ import requests
 from dotenv import load_dotenv
 import telegram
 
-from exceptions import EmptyList, NotTwoHundred
+from exceptions import NotTwoHundred
 
 load_dotenv()
 
